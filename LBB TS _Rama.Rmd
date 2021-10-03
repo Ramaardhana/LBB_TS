@@ -1,0 +1,147 @@
+---
+title: "LBB TS"
+author: "Rama Ardhana"
+date: "10/3/2021"
+output: html_document
+---
+
+```{r}
+library(tidyverse) #data manipulation
+library(lubridate) # date manipulation
+library(forecast) # time series library
+library(TTR) # for Simple moving average function
+library(MLmetrics) # calculate error
+library(tseries) # adf.test
+library(fpp) # usconsumtion
+```
+
+
+Eksplorasi Data
+
+```{r}
+# your code here
+assault<-read.csv("Quiz/assault.csv")
+str(assault)
+```
+
+```{r}
+assault<-assault %>% mutate(Date=ymd(Date))
+head(assault)
+```
+```{r}
+range(assault$Date)
+```
+Range "date" berupa data harian
+
+```{r}
+nrow(assault)/365
+```
+Urutan data "Date" tepat 6 tahun
+
+```{r}
+colSums(is.na(assault))
+```
+
+Tidak ada data NA
+
+```{r}
+assault_ts<-ts(assault$Amount_Assault,
+               start = 2014-01-01,
+               frequency = 365)#data harian, pola yang ingin dilihat tahunan
+
+assault_ts %>% autoplot()
+```
+
+Dari plot terlihat variasi seasonalnya dari tahun ke tahun relatif konstan (Additive time series)
+
+
+# Dekomposisi
+  
+Melihat pola *trend*, *seasonality*, dan *error* 
+
+```{r}
+# your code here
+assault_ts %>% decompose(type = "additive") %>% autoplot()
+```
+
+Terlihat trend yang meningkat dan seasonal yg konstan
+
+```{r}
+#Cross Validation
+test_assault<-tail(assault_ts, 365)
+
+train_assault<-head(assault_ts, length(assault_ts)-length(test_assault))
+```
+
+
+
+```{r}
+# menggunakan model Holt-Winters karena data memiliki variasi trend dan seasonal
+model_hw<-HoltWinters(train_assault)
+
+model_hw$alpha
+model_hw$beta
+model_hw$gamma
+```
+
+
+```{r}
+#visualisasi model
+train_assault %>% autoplot()+autolayer(model_hw$fitted[,1], series = "Model_HW")
+```
+
+#Forecasting
+```{r}
+# forcast model HW
+hw_forecast<-forecast(model_hw, h=365)
+```
+
+
+```{r}
+test_assault %>% autoplot()+autolayer(hw_forecast$mean, series = "Forecast_HW")
+```
+```{r}
+accuracy(hw_forecast$mean, test_assault)
+```
+
+tuning model
+```{r}
+model_hw1<-HoltWinters(train_assault, beta = 0.001, gamma = 0.3)
+
+hw1_forecast<-forecast(model_hw1, h=365)
+```
+
+```{r}
+train_assault %>% autoplot()+autolayer(model_hw1$fitted[,1], series = "Model_HW")+
+  autolayer(test_assault)+
+  autolayer(hw_forecast$mean, series = "Forecast_HW")+
+  autolayer(hw1_forecast$mean, series = "Forecast_HW1")
+```
+```{r}
+accuracy(hw_forecast$mean, test_assault)
+accuracy(hw1_forecast$mean, test_assault)
+```
+```{r}
+model_arima<-stlm(y = train_assault, s.window = 365, method = "arima")
+model_arima$model
+```
+
+```{r}
+arima_forecast<-forecast(model_arima, h=365)
+
+```
+
+```{r}
+train_assault %>% autoplot()+
+  autolayer(test_assault)+
+  autolayer(arima_forecast$mean, series = "Forecast_ARIMA")
+```
+```{r}
+accuracy(arima_forecast$mean, test_assault)
+accuracy(hw1_forecast$mean, test_assault)
+```
+Kesimpulan:
+Perubahan nilai beta & gama berpengaruh sedikit pada akurasi model hw
+Model ARIMA menunjukan performa yang sedikit lebih baik
+
+
